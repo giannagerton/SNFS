@@ -6,12 +6,14 @@
 #include <sys/types.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <time.h>
+#include <fcntl.h>
 #include "clientSNFS.h"
 #include "fileops.h"
 
 int port;
-char server_address[255];
+char server_hostname[255];
 char* mount;
 
 static int client_getattr(const char* path, struct stat* st);
@@ -20,8 +22,29 @@ static struct fuse_operations operations = {
 	.getattr = client_getattr,
 };
 
-static int get_host_ip(char* hostname, char* host_ip) {
+static int get_host_ip(char* host_ip) {
+	struct addrinfo h;
+	struct addrinfo *info;
+	struct addrinfo *p;
+	struct sockaddr_in *server_address;
+	int addr_check;
+
+	memset(&h, 0, sizeof(h));
+	h.ai_family = AF_UNSPEC;
+	h.ai_socktype = SOCK_STREAM;
 	
+	if ((addr_check = getaddrinfo(server_hostname, "http", &h, &info)) != 0) {
+		printf("getaddrinfo: %s\n", gai_strerror(addr_check));
+		return 0;
+	}
+
+	for (p = info; p != NULL; p = p->ai_next) {
+		server_address = (struct sockaddr_in*)p->ai_addr;
+		strcpy(host_ip, inet_ntoa(server_address->sin_addr));
+	}
+
+	freeaddrinfo(info);
+	return 1;
 }
 
 // create a connection to the server and return the socket
@@ -34,12 +57,21 @@ static int create_connection() {
 		perror("could not create socket");
 		exit(-1);
 	}
-	
+	char host_ip[100];
+	memset(&server_addr, '\0', sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(port);
-	server_addr.sin_addr.s_addr = inet_addr(server_address);
-	if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) != 0) {
+
+	if (get_host_ip(host_ip) != 1) {
+		close(sockfd);
+		exit(-1);
+	}
+	
+	inet_pton(AF_INET, host_ip, &server_addr.sin_addr);
+	if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {	
 		perror("could not connect to server");	
+		printf("%s\n", server_hostname);
+		printf("%d\n", port);
 		close(sockfd);
 		exit(-1);
 	}
@@ -55,7 +87,7 @@ int add_param_to_buffer(char* buffer, char* param, int param_size, int offset) {
 }
 
 void send_message(int sockfd, char* buffer, int count) {
-	if (send(sockfd, buffer, count, 0) < 0) {
+	if (send(sockfd, buffer, BUFFER_SIZE, 0) < 0) {
 		perror("send failed");
 		close(sockfd);
 		exit(-1);
@@ -64,7 +96,7 @@ void send_message(int sockfd, char* buffer, int count) {
 
 int recv_message(int sockfd, char* buffer) {
 	int received;
-	if ((received = recv(sockfd, buffer, BUFFER_SIZE, 0)) <= 0) {
+	if ((received = recv(sockfd, buffer, BUFFER_SIZE, 0)) < 0) {
 		perror("receive failed");
 		close(sockfd);
 		exit(-1);
@@ -83,19 +115,24 @@ static int client_getattr(const char* path, struct stat* st) {
 	buffer[0] = GETATTR;
 	buffer[1] = SEPARATOR;
 	count = 2;
-	
-	count = add_param_to_buffer(buffer, (char*)path, strlen(path), count); 
-	count = add_param_to_buffer(buffer, (char*)&uid, sizeof(uid), count);
-	count = add_param_to_buffer(buffer, (char*)&gid, sizeof(gid), count);
-
+	printf("getattr\n");
+//:	count = add_param_to_buffer(buffer, (char*)path, strlen(path), count); 
+//	count = add_param_to_buffer(buffer, (char*)&uid, sizeof(uid), count);
+//	count = add_param_to_buffer(buffer, (char*)&gid, sizeof(gid), count);
+	printf("hereA: %d\n", buffer[0]);
 	send_message(sockfd, buffer, count);
-	recv_message(sockfd, buffer);	
+	printf("sent message\n");
+	while (1) {
+		if (recv_message(sockfd, buffer) > 0) {
+			break;
+		}
+	}	
 	count = 0;
-
-	while ((count < BUFFER_SIZE) && (count < received))  {
+	printf("here: %c\n", buffer[0]);
+	//while ((count < BUFFER_SIZE) && (count < received))  {
 		//parse_message(*buffer);
-		count++;
-	}
+	//	count++;
+	//}
 	close(sockfd);
 	return buffer[0];
 }
@@ -116,7 +153,7 @@ int main(int argc, char *argv[]) {
 		perror("need to specify address");
 		exit(-1);
 	}
-	strcpy(server_address, argv[4]);
+	strcpy(server_hostname, argv[4]);
 	if (strcmp(argv[5], "-mount") != 0) {
 		perror("need to specify mount point");
 		exit(-1);

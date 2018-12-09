@@ -25,13 +25,15 @@ int server_getattr(char* buffer) {
 	uid_t uid;
 	gid_t gid;
 	struct stat* statbuf;
+	printf("getattr\n");
 	// get args
 	// convert pathname (if needed)
-	if (stat(pathname, statbuf) != 0) {
-		perror("getattr error");
-		exit(-1);
-	}
-	return get_attr(statbuf, pathname, uid, gid);
+	//if (stat(pathname, statbuf) != 0) {
+	//	perror("getattr error");
+	//	exit(-1);
+	//}
+	//return get_attr(statbuf, pathname, uid, gid);
+	return 0;
 }
 
 void* thread_runner(void* args) {
@@ -42,20 +44,25 @@ void* thread_runner(void* args) {
 	int retval;
 	printf("successful connection\n");
 	thread_args = (client_args*)args;
-	pthread_exit(NULL);
-	while (recv(thread_args->sockfd, buffer, BUFFER_SIZE, 0) <= 0) {
+	printf("sockfd = %d\n", thread_args->sockfd);
+	while (1) {
+		if (recv(thread_args->sockfd, buffer, BUFFER_SIZE, 0) > 0) {
+			printf("got something\n");
+			break;
+		}
 	}
+	printf("got something\n");
 	function_id = buffer[0];
 	switch (function_id) {
 		case GETATTR:
 			server_getattr(buffer);
 			break;
 		default:
+			printf("default\n");
 			retval = -1;
 			break;
 	}
-	send_back = (int*)&buffer[0];
-	*send_back = retval;
+	buffer[0] = 'a';
 	send(thread_args->sockfd, buffer, BUFFER_SIZE, 0);
 	close(thread_args->sockfd);
 }
@@ -87,7 +94,7 @@ int main(int argc, char *argv[]) {
 		exit(-1);
 	}
 	
-	if (strcmp(argv[2], "-port") == 0) {
+	if (strcmp(argv[1], "-port") == 0) {
 		port = atoi(argv[2]);
 	}
 
@@ -112,6 +119,7 @@ int main(int argc, char *argv[]) {
 			printf("dont fail!\n");
 			exit(1);
 		}
+		printf("%d\n", client_fd);
 		pthread_t thread;
 		client_args args;
 		args.sockfd = client_fd;
