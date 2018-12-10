@@ -114,7 +114,7 @@ int main(int argc, char *argv[]) {
 		exit(-1);
 	}
 	while (1) {
-		if (client_fd = accept(serverfd, (struct sockaddr*) &new_address, &addr_size) < 0) {
+		if ((client_fd = accept(serverfd, (struct sockaddr*) &new_address, &addr_size)) < 0) {
 			close(serverfd);
 			printf("dont fail!\n");
 			exit(1);
