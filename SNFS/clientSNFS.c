@@ -22,12 +22,14 @@ static int client_open(const char* path, struct fuse_file_info* info);
 static int client_getattr(const char* path, struct stat* st);
 static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi);
 static int client_create(const char* path, mode_t mode, struct fuse_file_info* info);
+static int client_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* info);
 
 static struct fuse_operations operations = {
 	.getattr = client_getattr,
 	.readdir = client_readdir,
-	//.create = client_create,
-	//.open = client_open,
+	.create = client_create,
+	.open = client_open,
+	.read = client_read,
 };
 
 static int get_host_ip(char* host_ip) {
@@ -90,8 +92,7 @@ static int create_connection() {
 int add_param_to_buffer(char* buffer, char* param, int param_size, int offset) {
 	memcpy(buffer + offset, param, param_size);
 	offset += param_size;
-	buffer[offset] = SEPARATOR;
-	return offset + 1;
+	return offset;
 }
 
 int send_message(int sockfd, char* buffer, int count) {
@@ -123,9 +124,9 @@ static int client_create(const char* path, mode_t mode, struct fuse_file_info* i
 	buffer[1] = SEPARATOR;
 	count = 2;
 	printf("create\n");
-	count = add_param_to_buffer(buffer, (char*)path, strlen(path), count);
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path)+1, count);
 	count = add_param_to_buffer(buffer, (char*)&mode, sizeof(mode), count);
-
+	printf("finished adding params\n");
 	count = send_message(sockfd, buffer, count);
 	printf("sent message\n");
 
@@ -138,11 +139,30 @@ static int client_create(const char* path, mode_t mode, struct fuse_file_info* i
 	count = 0;
 	printf("here\n");
 	close(sockfd);
-	return buffer[0];
+	return 0;
 
 }
 
 static int client_open(const char* path, struct fuse_file_info* info) {
+	int sockfd, count, received;
+	sockfd = create_connection();
+	
+	char buffer[BUFFER_SIZE];
+	buffer[0] = OPEN;
+	buffer[1] = SEPARATOR;
+	count = 2;
+	printf("open\n");
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count);
+	send_message(sockfd, buffer, count);
+	while (1) {
+		if (recv_message(sockfd, buffer) > 0) {
+			break;
+		}
+	}
+
+	close(sockfd);
+	count = *(int*)buffer;
+	printf("fd = %d\n", count);
 	return 0;
 }
 
@@ -193,11 +213,20 @@ static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler
 	printf("readdir\n");
 	count = send_message(sockfd, buff, count);
 	while (1) {
-		if (recv_message(sockfd, buffer) > 0) {
+		if (recv_message(sockfd, buff) > 0) {
 			break;
 		}
 	}
-	filler(buffer, buff, NULL, 0);
+	printf("got here\n");
+	char* files = malloc(strlen(buff) + 1);
+	strcpy(files, buff);
+	printf("%s\n", files);
+	filler(buffer, files, NULL, 0);
+	free(files);
+	return 0;
+}
+
+static int client_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* info) {
 	return 0;
 }
 

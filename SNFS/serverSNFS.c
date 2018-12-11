@@ -9,6 +9,7 @@
 #include <time.h>
 #include <sys/types.h>
 #include <signal.h>
+#include <fcntl.h>
 #include "clientSNFS.h"
 #include "fileops.h"
 
@@ -16,24 +17,21 @@
 
 static int port;
 static int serverfd;
-static char mount_path[100];
+static char mount_path[300];
 typedef struct client_thread {
 	int sockfd;
 } client_args;
 
 
-int get_parameter(char* buffer, int start_index, int size, void* dest) {
-	// not a string
-	if (size != -1) {
-		memcpy(dest, buffer + start_index, size);
-		return size;
-	}
-	size = start_index;
-	while (buffer[size] != '\0' && size < BUFFER_SIZE) {
-		size++;
-	}
-	memcpy(dest, buffer + start_index, (size - start_index));
-	return size;
+int get_struct_parameter(char* buffer, int start_index, int size, void* dest) {
+	memcpy(dest, buffer + start_index, size);
+	return size + start_index;
+}
+
+int get_string_parameter(char* buffer, int start_index, char* dest) {
+	int size = strlen(buffer + start_index);
+	memcpy(dest, buffer + start_index, size);
+	return size + start_index;
 }
 
 int server_getattr(char* buffer) {
@@ -55,28 +53,45 @@ int server_getattr(char* buffer) {
 
 int server_readdir(char* buffer) {
 	printf("reading dir\n");
-	char path[BUFFER_SIZE];
+	bzero(buffer, BUFFER_SIZE);
 	strcpy(buffer, "we_got_this.c");
 	return 0;
 }
 
 int server_create(char* buffer) {
-	char path[BUFFER_SIZE];
+	char file_name[BUFFER_SIZE];
 	char final_path[BUFFER_SIZE];
 
 	strcpy(final_path, mount_path);
 	
 	mode_t mode;
 	int count;
-	count = get_parameter(buffer, 2, -1, path);
-	count = get_parameter(buffer, count, sizeof(mode_t), &mode);
+	count = get_string_parameter(buffer, 2, file_name);
+	count = get_struct_parameter(buffer, count, sizeof(mode_t), &mode);
 	// do the things
-	printf("%s\n", path);
-	strcat(final_path, path);
-	if (creat(path, mode) < 0) {
+	printf("%s\n", file_name);
+	strcat(final_path, file_name);
+	if (creat(final_path, mode) < 0) {
 		perror("could not create");
 		return -1;
 	}
+	return 0;
+}
+
+int server_open(char* buffer) {
+	char file_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+
+	strcpy(final_path, mount_path);
+	int count, fd;
+	count = get_string_parameter(buffer, 2, file_name);
+	strcat(final_path, file_name);
+	printf("final path = %s\n", final_path);
+	if ((fd = open(final_path, O_CREAT)) < 0) {
+		perror("could not open");
+		return -1;
+	}
+	memcpy(buffer, &fd, sizeof(int));
 	return 0;
 }
 
@@ -105,6 +120,9 @@ void* thread_runner(void* args) {
 		case CREATE:
 			server_create(buffer);
 			break;
+		case OPEN:
+			server_open(buffer);
+			break;
 		case READDIR:
 			server_readdir(buffer);
 			break;
@@ -113,6 +131,7 @@ void* thread_runner(void* args) {
 			retval = -1;
 			break;
 	}
+	printf("%s\n", buffer);
 	send(thread_args->sockfd, buffer, BUFFER_SIZE, 0);
 	close(thread_args->sockfd);
 }
@@ -148,7 +167,12 @@ int main(int argc, char *argv[]) {
 		port = atoi(argv[2]);
 	}
 	if (strcmp(argv[3], "-mount") == 0) {
-		strcpy(mount_path, argv[4]);
+		//strcpy(mount_path, argv[4]);
+		if (realpath(argv[4], mount_path) == NULL) {
+			perror("invalid path");
+			close(serverfd);
+			exit(-1);
+		}
 	}
 
 	address.sin_family = AF_INET;
