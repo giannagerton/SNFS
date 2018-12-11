@@ -193,7 +193,7 @@ static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler
 	printf("readdir\n");
 	count = send_message(sockfd, buff, count);
 	while (1) {
-		if (recv_message(sockfd, buffer) > 0) {
+		if (recv_message(sockfd, buff) > 0) {
 			break;
 		}
 	}
