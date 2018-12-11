@@ -11,6 +11,7 @@
 #include <signal.h>
 #include "clientSNFS.h"
 #include "fileops.h"
+#include <errno.h>
 
 #define MAX_CLIENTS 10
 
@@ -42,11 +43,13 @@ void* thread_runner(void* args) {
 	char function_id;
 	int* send_back;
 	int retval;
+	int sockfd = *(int*)args;	
 	printf("successful connection\n");
 	thread_args = (client_args*)args;
 	printf("sockfd = %d\n", thread_args->sockfd);
+	printf("%d\n", errno);
 	while (1) {
-		if (recv(thread_args->sockfd, buffer, BUFFER_SIZE, 0) > 0) {
+		if (recv(sockfd, buffer, BUFFER_SIZE, 0) > 0) {
 			printf("got something\n");
 			break;
 		}
@@ -62,9 +65,9 @@ void* thread_runner(void* args) {
 			retval = -1;
 			break;
 	}
-	buffer[0] = 'a';
-	send(thread_args->sockfd, buffer, BUFFER_SIZE, 0);
-	close(thread_args->sockfd);
+	buffer[0] = 0;
+	send(sockfd, buffer, BUFFER_SIZE, 0);
+	close(sockfd);
 }
 
 void handle_sigint(int sig) {
@@ -114,7 +117,7 @@ int main(int argc, char *argv[]) {
 		exit(-1);
 	}
 	while (1) {
-		if (client_fd = accept(serverfd, (struct sockaddr*) &new_address, &addr_size) < 0) {
+		if ((client_fd = accept(serverfd, (struct sockaddr*) &new_address, &addr_size)) < 0) {
 			close(serverfd);
 			printf("dont fail!\n");
 			exit(1);
@@ -123,7 +126,8 @@ int main(int argc, char *argv[]) {
 		pthread_t thread;
 		client_args args;
 		args.sockfd = client_fd;
-		pthread_create(&thread, NULL, &thread_runner, &args);
+		printf("here in server\n");
+		pthread_create(&thread, NULL, &thread_runner, &client_fd);
 		// create thread
 	}
 	close(serverfd);

@@ -1,7 +1,6 @@
 
 #ifndef CLIENTSNFS_H
 #define CLIENTSNFS_H
-
 /*
  * FUNCTION IDENTIFIERS
  */

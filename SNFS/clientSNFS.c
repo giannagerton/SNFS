@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <fcntl.h>
+#include <errno.h>
 #include "clientSNFS.h"
 #include "fileops.h"
 
@@ -112,6 +113,7 @@ static int client_getattr(const char* path, struct stat* st) {
 	
 	// receive data from server
 	char buffer[BUFFER_SIZE];
+	//char* buffer = "this is stupid";
 	buffer[0] = GETATTR;
 	buffer[1] = SEPARATOR;
 	count = 2;
@@ -119,7 +121,9 @@ static int client_getattr(const char* path, struct stat* st) {
 //:	count = add_param_to_buffer(buffer, (char*)path, strlen(path), count); 
 //	count = add_param_to_buffer(buffer, (char*)&uid, sizeof(uid), count);
 //	count = add_param_to_buffer(buffer, (char*)&gid, sizeof(gid), count);
-	printf("hereA: %d\n", buffer[0]);
+	printf("hereA: %c\n", buffer[0]);
+	printf("sockfd: %d\n", sockfd);
+	//send(sockfd, buffer, strlen(buffer), 0);
 	send_message(sockfd, buffer, count);
 	printf("sent message\n");
 	while (1) {
@@ -129,6 +133,7 @@ static int client_getattr(const char* path, struct stat* st) {
 	}	
 	count = 0;
 	printf("here: %c\n", buffer[0]);
+	get_attr(st, path, getuid(), getgid());
 	//while ((count < BUFFER_SIZE) && (count < received))  {
 		//parse_message(*buffer);
 	//	count++;

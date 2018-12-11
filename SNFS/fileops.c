@@ -11,7 +11,7 @@ int get_attr(struct stat *statbuf, char* path, uid_t uid, gid_t gid) {
 	statbuf->st_gid = gid;
 	statbuf->st_atime = time(NULL);
 	statbuf->st_mtime = time(NULL);
-	
+	printf("hereeeee\n");	
 	if (strcmp(path, "/") == 0) {
 		statbuf->st_mode = S_IFDIR | 0755;
 		statbuf->st_nlink = 2;
