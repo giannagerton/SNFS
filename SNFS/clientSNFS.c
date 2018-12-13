@@ -1,3 +1,5 @@
+#define FUSE_USE_VERSION 30
+
 #include <fuse.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,10 +19,16 @@ int port;
 char server_hostname[255];
 char* mount;
 
+static int client_open(const char* path, struct fuse_file_info* info);
 static int client_getattr(const char* path, struct stat* st);
+static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi);
+static int client_create(const char* path, mode_t mode, struct fuse_file_info* info);
 
 static struct fuse_operations operations = {
 	.getattr = client_getattr,
+	.readdir = client_readdir,
+	//.create = client_create,
+	//.open = client_open,
 };
 
 static int get_host_ip(char* host_ip) {
@@ -87,12 +95,14 @@ int add_param_to_buffer(char* buffer, char* param, int param_size, int offset) {
 	return offset + 1;
 }
 
-void send_message(int sockfd, char* buffer, int count) {
-	if (send(sockfd, buffer, BUFFER_SIZE, 0) < 0) {
+int send_message(int sockfd, char* buffer, int count) {
+	int sent;
+	if ((sent = send(sockfd, buffer, BUFFER_SIZE, 0)) < 0) {
 		perror("send failed");
 		close(sockfd);
 		exit(-1);
 	}
+	return sent;
 }
 
 int recv_message(int sockfd, char* buffer) {
@@ -103,6 +113,38 @@ int recv_message(int sockfd, char* buffer) {
 		exit(-1);
 	}
 	return received;
+}
+
+static int client_create(const char* path, mode_t mode, struct fuse_file_info* info) {
+	int sockfd, count, received;
+	sockfd = create_connection();
+	
+	char buffer[BUFFER_SIZE];
+	buffer[0] = CREATE;
+	buffer[1] = SEPARATOR;
+	count = 2;
+	printf("create\n");
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path), count);
+	count = add_param_to_buffer(buffer, (char*)&mode, sizeof(mode), count);
+
+	count = send_message(sockfd, buffer, count);
+	printf("sent message\n");
+
+	while (1) {
+		if (recv_message(sockfd, buffer) > 0) {
+			break;
+		}
+	}
+
+	count = 0;
+	printf("here\n");
+	close(sockfd);
+	return buffer[0];
+
+}
+
+static int client_open(const char* path, struct fuse_file_info* info) {
+	return 0;
 }
 
 static int client_getattr(const char* path, struct stat* st) {
@@ -121,11 +163,9 @@ static int client_getattr(const char* path, struct stat* st) {
 //:	count = add_param_to_buffer(buffer, (char*)path, strlen(path), count); 
 //	count = add_param_to_buffer(buffer, (char*)&uid, sizeof(uid), count);
 //	count = add_param_to_buffer(buffer, (char*)&gid, sizeof(gid), count);
-	printf("hereA: %c\n", buffer[0]);
-	printf("sockfd: %d\n", sockfd);
-	//send(sockfd, buffer, strlen(buffer), 0);
-	send_message(sockfd, buffer, count);
-	printf("sent message\n");
+	printf("hereA: %d\n", buffer[0]);
+	count = send_message(sockfd, buffer, count);
+	printf("sent message: %d\n", count);
 	while (1) {
 		if (recv_message(sockfd, buffer) > 0) {
 			break;
@@ -133,13 +173,32 @@ static int client_getattr(const char* path, struct stat* st) {
 	}	
 	count = 0;
 	printf("here: %c\n", buffer[0]);
-	get_attr(st, path, getuid(), getgid());
 	//while ((count < BUFFER_SIZE) && (count < received))  {
 		//parse_message(*buffer);
 	//	count++;
 	//}
+	printf("pathname = %s\n", path);
+	get_attr(st, path, getuid(), getgid());
 	close(sockfd);
 	return buffer[0];
+}
+
+static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi) {
+	int sockfd, count, received;	
+	sockfd = create_connection();
+	char buff[BUFFER_SIZE];
+	buff[0] = READDIR;
+	buff[1] = SEPARATOR;
+	count = 2;
+	printf("readdir\n");
+	count = send_message(sockfd, buff, count);
+	while (1) {
+		if (recv_message(sockfd, buff) > 0) {
+			break;
+		}
+	}
+	filler(buffer, buff, NULL, 0);
+	return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -167,5 +226,5 @@ int main(int argc, char *argv[]) {
 	fuse_opt_add_arg(&args, "-f");
 	fuse_opt_add_arg(&args, argv[6]);
 
-	return fuse_main(args.argc, args.argv, &operations);
+	return fuse_main(args.argc, args.argv, &operations, NULL);
 }

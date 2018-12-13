@@ -11,7 +11,6 @@
 #include <signal.h>
 #include "clientSNFS.h"
 #include "fileops.h"
-#include <errno.h>
 
 #define MAX_CLIENTS 10
 
@@ -177,8 +176,7 @@ int main(int argc, char *argv[]) {
 		pthread_t thread;
 		client_args args;
 		args.sockfd = client_fd;
-		printf("here in server\n");
-		pthread_create(&thread, NULL, &thread_runner, &client_fd);
+		pthread_create(&thread, NULL, &thread_runner, &args);
 		// create thread
 	}
 	close(serverfd);
