@@ -144,6 +144,26 @@ int server_truncate(char* buffer) {
 	return 0;
 }
 
+int server_read(char* buffer) {
+
+	char file_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	strcpy(final_path, mount_path);
+	int count, fd, read;
+	size_t size;
+	off_t offset;
+	count = get_string_parameter(buffer, 2, file_name);
+	count = get_struct_parameter(buffer, count, sizeof(size_t), &size);
+	count = get_struct_parameter(buffer, count, sizeof(off_t), &offset);
+	strcat(final_path, file_name);
+	bzero(buffer, BUFFER_SIZE);
+	fd = open(final_path, 0);
+	read = pread(fd, buffer + sizeof(int), size, offset);
+	add_param_to_buffer(buffer, (char*)&read, sizeof(int), 0);
+	printf("%s\n", buffer + sizeof(int));
+	return 0;
+}
+
 void* thread_runner(void* args) {
 	client_args* thread_args;
 	char buffer[BUFFER_SIZE];
@@ -180,6 +200,9 @@ void* thread_runner(void* args) {
 			break;
 		case TRUNCATE:
 			server_truncate(buffer);
+			break;
+		case READ:
+			server_read(buffer);
 			break;
 		default:
 			printf("default\n");

@@ -252,7 +252,37 @@ static int client_truncate(const char* path, off_t size) {
 }
 
 static int client_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* info) {
-	return 0;
+	int sockfd, count, received;
+	sockfd = create_connection();
+	char buffer[BUFFER_SIZE];
+	buffer[0] = READ;
+	buffer[1] = SEPARATOR;
+	count = 2;
+	printf("read\n");
+	printf("size = %d\n", size);
+	printf("%d\n", offset);
+	
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count);
+	count = add_param_to_buffer(buffer, (char*)&size, sizeof(size_t), count);
+	count = add_param_to_buffer(buffer, (char*)&offset, sizeof(off_t), count);
+	
+	count = send_message(sockfd, buffer, count);
+	printf("read2\n");
+	while (1) {
+		if (recv_message(sockfd, buffer) > 0) {
+			break;
+		}
+	}
+	received = *(int*)&buffer;
+	printf("read3\n");
+	if (received > BUFFER_SIZE) {
+		received = BUFFER_SIZE;
+	}
+	memcpy(buf, buffer + sizeof(int), received);
+	printf("read4\n");
+	printf("%s\n", buffer + sizeof(int));
+	close(sockfd);
+	return received;
 }
 
 int main(int argc, char *argv[]) {

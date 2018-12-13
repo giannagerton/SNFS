@@ -43,7 +43,7 @@ int get_string_parameter(char* buffer, int start_index, char* dest) {
 }
 
 int add_param_to_buffer(char* buffer, char* param, int param_size, int offset) {
-		memcpy(buffer + offset, param, param_size);
+	memcpy(buffer + offset, param, param_size);
 	offset += param_size;
 	return offset;
 }
