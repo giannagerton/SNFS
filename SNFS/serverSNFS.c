@@ -95,6 +95,37 @@ int server_open(char* buffer) {
 	return 0;
 }
 
+// TODO: figure out what this is supposed to actually do (if anything)
+int server_flush(char* buffer) {
+	char file_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	strcpy(final_path, mount_path);
+	int count;
+	count = get_string_parameter(buffer, 2, file_name);
+	strcat(final_path, file_name);
+	
+	return 0;
+}
+
+int server_truncate(char* buffer) {
+	char file_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	strcpy(final_path, mount_path);
+	int count;
+	off_t offset;
+	count = get_string_parameter(buffer, 2, file_name);
+	printf("%s\n", file_name);
+	count = get_struct_parameter(buffer, count, sizeof(off_t), &offset);
+	strcat(final_path, file_name);
+	printf("trunc offset = %d\n", offset);
+	printf("trunc path = %s\n", final_path);
+	if (truncate(final_path, offset) != 0) {
+		perror("could not truncate");
+		return -1;
+	}
+	return 0;
+}
+
 void* thread_runner(void* args) {
 	client_args* thread_args;
 	char buffer[BUFFER_SIZE];
@@ -125,6 +156,12 @@ void* thread_runner(void* args) {
 			break;
 		case READDIR:
 			server_readdir(buffer);
+			break;
+		case FLUSH:
+			server_flush(buffer);
+			break;
+		case TRUNCATE:
+			server_truncate(buffer);
 			break;
 		default:
 			printf("default\n");
