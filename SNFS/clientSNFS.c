@@ -25,6 +25,7 @@ static int client_create(const char* path, mode_t mode, struct fuse_file_info* i
 static int client_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* info);
 static int client_flush(const char* path, struct fuse_file_info* info);
 static int client_truncate(const char* path, off_t offset);
+static int client_write(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* file);
 
 static struct fuse_operations operations = {
 	.getattr = client_getattr,
@@ -34,6 +35,7 @@ static struct fuse_operations operations = {
 	.read = client_read,
 	.flush = client_flush,
 	.truncate = client_truncate,
+	.write = client_write,
 };
 
 static int get_host_ip(char* host_ip) {
@@ -169,19 +171,21 @@ static int client_getattr(const char* path, struct stat* st) {
 	buffer[1] = SEPARATOR;
 	count = 2;
 	printf("getattr\n");
-//:	count = add_param_to_buffer(buffer, (char*)path, strlen(path), count); 
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count); 
 //	count = add_param_to_buffer(buffer, (char*)&uid, sizeof(uid), count);
 //	count = add_param_to_buffer(buffer, (char*)&gid, sizeof(gid), count);
+	printf("%s\n", path);
 	count = send_message(sockfd, buffer, count);
 	while (1) {
 		if (recv_message(sockfd, buffer) > 0) {
 			break;
 		}
 	}	
-	count = 0;
-	get_attr(st, path, getuid(), getgid());
+	get_attr(st, (char*)path, uid, gid);
+	memcpy(&received, buffer, sizeof(int));
 	close(sockfd);
-	return buffer[0];
+	printf("received = %d\n", received);
+	return received;
 }
 
 static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi) {
@@ -215,11 +219,14 @@ static int client_flush(const char* path, struct fuse_file_info* fi) {
 	buffer[1] = SEPARATOR;
 	count = 2;
 	printf("flush\n");
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, 2);
 	count = send_message(sockfd, buffer, count);
+	
 	while (1) {
 		if (recv_message(sockfd, buffer) > 0) {
 			break;
 		}
+		printf("uh oh\n");
 	}
 	close(sockfd);
 	return 0;
@@ -281,6 +288,35 @@ static int client_read(const char* path, char* buf, size_t size, off_t offset, s
 	memcpy(buf, buffer + sizeof(int), received);
 	printf("read4\n");
 	printf("%s\n", buffer + sizeof(int));
+	close(sockfd);
+	return received;
+}
+
+static int client_write(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* fi) {
+	int sockfd, count, received;
+	sockfd = create_connection();
+	char buffer[BUFFER_SIZE];
+	buffer[0] = WRITE;
+	buffer[1] = SEPARATOR;
+	count = 2;
+	printf("write\n");
+	
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count);
+	count = add_param_to_buffer(buffer, (char*)&size, sizeof(size_t), count);
+	count = add_param_to_buffer(buffer, (char*)&offset, sizeof(off_t), count);
+	count = add_param_to_buffer(buffer, (char*)buf, strlen(buf) + 1, count);
+	
+	count = send_message(sockfd, buffer, count);
+	while (1) {
+		if (recv_message(sockfd, buffer) > 0) {
+			break;
+		}
+	}
+	received = *(int*)&buffer;
+	printf("%d\n", received);
+	if (received > BUFFER_SIZE) {
+		received = BUFFER_SIZE;
+	}
 	close(sockfd);
 	return received;
 }

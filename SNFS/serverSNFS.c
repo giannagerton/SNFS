@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <stdio.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <stdlib.h>
@@ -40,19 +41,34 @@ int get_string_parameter(char* buffer, int start_index, char* dest) {
 */
 
 int server_getattr(char* buffer) {
-	char* pathname;
-	uid_t uid;
-	gid_t gid;
+	char pathname[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
 	struct stat* statbuf;
+	int return_value;
 	printf("getattr\n");
-	// get args
-	// convert pathname (if needed)
-	//if (stat(pathname, statbuf) != 0) {
-	//	perror("getattr error");
-	//	exit(-1);
-	//}
+	strcpy(final_path, mount_path);
+	get_string_parameter(buffer, 2, pathname); 
+	strcat(final_path, pathname);
+	bzero(buffer, BUFFER_SIZE);
+	/*
+	printf("%s\n", pathname);
+	close(serverfd);
+	exit(-1);
+	if (stat(pathname, statbuf) != 0) {
+		perror("getattr error");
+		close(serverfd);
+		return -1;
+	}
+	*/
 	//return get_attr(statbuf, pathname, uid, gid);
-	buffer[0] = 0;
+	//add_param_to_buffer(buffer, (char*)statbuf, sizeof(struct stat), 0);
+	if (access(final_path, F_OK) != -1) {
+		return_value = 0;
+	}
+	else {
+		return_value = -ENOENT;	
+	}
+	memcpy(buffer, &return_value, sizeof(return_value));
 	return 0;
 }
 
@@ -78,7 +94,7 @@ int server_readdir(char* buffer) {
 int server_create(char* buffer) {
 	char file_name[BUFFER_SIZE];
 	char final_path[BUFFER_SIZE];
-
+	int fd;
 	strcpy(final_path, mount_path);
 	
 	mode_t mode;
@@ -88,10 +104,11 @@ int server_create(char* buffer) {
 	// do the things
 	printf("%s\n", file_name);
 	strcat(final_path, file_name);
-	if (creat(final_path, mode) < 0) {
+	if ((fd = creat(final_path, mode)) < 0) {
 		perror("could not create");
 		return -1;
 	}
+	close(fd);
 	return 0;
 }
 
@@ -104,10 +121,12 @@ int server_open(char* buffer) {
 	count = get_string_parameter(buffer, 2, file_name);
 	strcat(final_path, file_name);
 	printf("final path = %s\n", final_path);
-	if ((fd = open(final_path, O_CREAT)) < 0) {
+	
+	if ((fd = open(final_path, O_CREAT, 0777)) < 0) {
 		perror("could not open");
 		return -1;
 	}
+	close(fd);
 	memcpy(buffer, &fd, sizeof(int));
 	return 0;
 }
@@ -159,8 +178,42 @@ int server_read(char* buffer) {
 	bzero(buffer, BUFFER_SIZE);
 	fd = open(final_path, 0);
 	read = pread(fd, buffer + sizeof(int), size, offset);
+	close(fd);
 	add_param_to_buffer(buffer, (char*)&read, sizeof(int), 0);
 	printf("%s\n", buffer + sizeof(int));
+	return 0;
+}
+
+int server_write(char* buffer) {
+	char write_file[BUFFER_SIZE];
+	char write_file_path[BUFFER_SIZE];
+	char write_buf[BUFFER_SIZE];
+	strcpy(write_file_path, mount_path);
+	
+	int count, readfd, writefd, written;
+	size_t size;
+	off_t offset;
+	count = get_string_parameter(buffer, 2, write_file);
+	count = get_struct_parameter(buffer, count, sizeof(size_t), &size);
+	count = get_struct_parameter(buffer, count, sizeof(off_t), &offset);
+	count = get_string_parameter(buffer, count, write_buf);
+	strcat(write_file_path, write_file);
+	bzero(buffer, BUFFER_SIZE);
+	printf("write file = %s\n", write_file_path);
+	printf("write buf = %s\n", write_buf);
+	if ((writefd = open(write_file_path, O_RDWR)) < 0) {
+		perror("could not open");
+		return -1;
+	}
+	printf("fd = %d\n", writefd);
+	printf("size = %d\n", size);
+	printf("offset = %d\n", offset);
+	written = pwrite(writefd, write_buf, size, offset);
+	
+	printf("written = %d\n", written);
+	add_param_to_buffer(buffer, (char*)&written, sizeof(int), 0);
+	close(writefd);
+	
 	return 0;
 }
 
@@ -204,12 +257,14 @@ void* thread_runner(void* args) {
 		case READ:
 			server_read(buffer);
 			break;
+		case WRITE:
+			server_write(buffer);
+			break;
 		default:
 			printf("default\n");
 			retval = -1;
 			break;
 	}
-	printf("%s\n", buffer);
 	send(thread_args->sockfd, buffer, BUFFER_SIZE, 0);
 	close(thread_args->sockfd);
 }
