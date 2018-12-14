@@ -20,6 +20,6 @@ static char CLOSE = 12;
 #define READDIR 9
 
 static int BUFFER_SIZE = 256;
-static char SEPARATOR = 255;
+static char SEPARATOR = 0;
 
 #endif

@@ -13,6 +13,7 @@
 #include "clientSNFS.h"
 #include "fileops.h"
 #include <errno.h>
+#include <dirent.h>
 
 #define MAX_CLIENTS 10
 
@@ -23,17 +24,21 @@ typedef struct client_thread {
 	int sockfd;
 } client_args;
 
-
+/*
 int get_struct_parameter(char* buffer, int start_index, int size, void* dest) {
 	memcpy(dest, buffer + start_index, size);
+	printf("size = %d\n", size);
+	printf("start index = %d\n", start_index);
+	printf("%d\n", *&buffer[start_index]);
 	return size + start_index;
 }
-
+/
 int get_string_parameter(char* buffer, int start_index, char* dest) {
-	int size = strlen(buffer + start_index);
-	memcpy(dest, buffer + start_index, size);
+	int size = strlen(buffer + start_index) + 1;
+	memcpy(dest, buffer + start_index, size + 1);
 	return size + start_index;
 }
+*/
 
 int server_getattr(char* buffer) {
 	char* pathname;
@@ -54,14 +59,26 @@ int server_getattr(char* buffer) {
 
 int server_readdir(char* buffer) {
 	printf("reading dir\n");
+	char final_path[BUFFER_SIZE];
+	char directory[BUFFER_SIZE];
+	strcpy(final_path, mount_path);
+	int count = 2;
+	count = get_string_parameter(buffer, count, directory);
+	strcat(final_path, directory);
 	bzero(buffer, BUFFER_SIZE);
-	strcpy(buffer, "we_got_this.c");
+	DIR* open_dir = opendir(final_path);
+	struct dirent* read_dir;
+	count = 0;
+	bzero(buffer, BUFFER_SIZE);
+	while ((read_dir = readdir(open_dir)) != NULL) {
+		count = add_param_to_buffer(buffer, read_dir->d_name, strlen(read_dir->d_name) + 1, count);
+	}
 	return 0;
 }
 
 int server_opendir(char* buffer){
 	printf("opening directory\n");
-	bzero(buffer, BUFFER_SIz);
+	bzero(buffer, BUFFER_SIZE);
 	return 0;
 }
 
@@ -121,6 +138,7 @@ int server_truncate(char* buffer) {
 	int count;
 	off_t offset;
 	count = get_string_parameter(buffer, 2, file_name);
+	printf("count = %d\n", count);
 	printf("%s\n", file_name);
 	count = get_struct_parameter(buffer, count, sizeof(off_t), &offset);
 	strcat(final_path, file_name);

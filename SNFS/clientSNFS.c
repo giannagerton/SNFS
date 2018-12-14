@@ -94,11 +94,6 @@ static int create_connection() {
 }
 
 // returns offset
-int add_param_to_buffer(char* buffer, char* param, int param_size, int offset) {
-	memcpy(buffer + offset, param, param_size);
-	offset += param_size;
-	return offset;
-}
 
 int send_message(int sockfd, char* buffer, int count) {
 	int sent;
@@ -205,12 +200,11 @@ static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler
 			break;
 		}
 	}
-	printf("got here\n");
-	char* files = malloc(strlen(buff) + 1);
-	strcpy(files, buff);
-	printf("%s\n", files);
-	filler(buffer, files, NULL, 0);
-	free(files);
+	char file[BUFFER_SIZE];
+	count = 0;
+	while (((count = get_string_parameter(buff, count, file)) <= BUFFER_SIZE) && (count >= 0)) {
+		filler(buffer, file, NULL, 0);
+	}
 	close(sockfd);
 	return 0;
 }
@@ -221,7 +215,7 @@ static int client_opendir(const char* path){
 	buff[0] = OPENDIR;
 	buff[1] = SEPARATOR;
 	printf("opendir\n");
-	send_message(sockfd, buff);
+//	send_message(sockfd, buff);
 	return 0;
 }
 
@@ -253,9 +247,12 @@ static int client_truncate(const char* path, off_t size) {
 	printf("truncate\n");
 	printf("trunc path = %s\n", path);
 
-	count = add_param_to_buffer(buffer, (char*)path, strlen(path), count);
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count);
+	printf("count = %d\n", count);
 	count = add_param_to_buffer(buffer, (char*)&size, sizeof(off_t), count);
 	printf("%d\n", size);
+	printf("off size = %d\n", sizeof(off_t));
+	printf("%d\n", *&buffer[count - sizeof(off_t)]);
 	count = send_message(sockfd, buffer, count);
 	while (1) {
 		if (recv_message(sockfd, buffer) > 0) {
