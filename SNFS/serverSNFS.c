@@ -41,11 +41,17 @@ int get_string_parameter(char* buffer, int start_index, char* dest) {
 */
 
 int server_getattr(char* buffer) {
-	char* pathname;
-	uid_t uid;
-	gid_t gid;
+	char pathname[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	//uid_t uid;
+	//gid_t gid;
 	struct stat* statbuf;
+	int return_value;
 	printf("getattr\n");
+	strcpy(final_path, pathname);
+	get_string_parameter(buffer, 2, pathname);
+	strcat(final_path, pathname);
+	bzero(buffer, BUFFER_SIZE);
 	// get args
 	// convert pathname (if needed)
 	//if (stat(pathname, statbuf) != 0) {
@@ -53,7 +59,14 @@ int server_getattr(char* buffer) {
 	//	exit(-1);
 	//}
 	//return get_attr(statbuf, pathname, uid, gid);
-	buffer[0] = 0;
+	//buffer[0] = 0;
+	if(access(final_path, F_OK) != -1) {
+		return_value = 0;
+	}
+	else{
+		return_value = -ENOENT;
+	}
+	memcpy(buffer, &return_value, sizeof(return_value));
 	return 0;
 }
 
@@ -97,6 +110,26 @@ int server_create(char* buffer) {
 	strcat(final_path, file_name);
 	if (creat(final_path, mode) < 0) {
 		perror("could not create");
+		return -1;
+	}
+	return 0;
+}
+
+int server_mkdir(char* buffer){
+	char dir_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	
+	strcpy(final_path, mount_path);
+
+	mode_t mode;
+	int count;
+	count = get_string_parameter(buffer,1, dir_name);
+	count = get_struct_parameter(buffer, count, sizeof(mode_t), &mode);
+	printf("in mkdir\n");	
+	printf("%s\n", dir_name);
+	strcat(final_path, dir_name);
+	if(mkdir(final_path, mode) < 0){
+		perror("could not create directory");
 		return -1;
 	}
 	return 0;
@@ -151,6 +184,26 @@ int server_truncate(char* buffer) {
 	return 0;
 }
 
+int server_read(char* buffer) {
+
+	char file_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	strcpy(final_path, mount_path);
+	int count, fd, read;
+	size_t size;
+	off_t offset;
+	count = get_string_parameter(buffer, 2, file_name);
+	count = get_struct_parameter(buffer, count, sizeof(size_t), &size);
+	count = get_struct_parameter(buffer, count, sizeof(off_t), &offset);
+	strcat(final_path, file_name);
+	bzero(buffer, BUFFER_SIZE);
+	fd = open(final_path, 0);
+	read = pread(fd, buffer + sizeof(int), size, offset);
+	add_param_to_buffer(buffer, (char*)&read, sizeof(int), 0);
+	printf("%s\n", buffer + sizeof(int));
+	return 0;
+}
+
 void* thread_runner(void* args) {
 	client_args* thread_args;
 	char buffer[BUFFER_SIZE];
@@ -187,6 +240,12 @@ void* thread_runner(void* args) {
 			break;
 		case TRUNCATE:
 			server_truncate(buffer);
+			break;
+		case READ:
+			server_read(buffer);
+			break;
+		case MKDIR:
+			server_mkdir(buffer);
 			break;
 		default:
 			printf("default\n");

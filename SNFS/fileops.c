@@ -11,7 +11,6 @@ int get_attr(struct stat *statbuf, char* path, uid_t uid, gid_t gid) {
 	statbuf->st_gid = gid;
 	statbuf->st_atime = time(NULL);
 	statbuf->st_mtime = time(NULL);
-	printf("hereeeee\n");	
 	if (strcmp(path, "/") == 0) {
 		statbuf->st_mode = S_IFDIR | 0755;
 		statbuf->st_nlink = 2;
@@ -43,7 +42,7 @@ int get_string_parameter(char* buffer, int start_index, char* dest) {
 }
 
 int add_param_to_buffer(char* buffer, char* param, int param_size, int offset) {
-		memcpy(buffer + offset, param, param_size);
+	memcpy(buffer + offset, param, param_size);
 	offset += param_size;
 	return offset;
 }
