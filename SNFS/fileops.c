@@ -12,7 +12,7 @@ int get_attr(struct stat *statbuf, char* path, uid_t uid, gid_t gid) {
 	statbuf->st_atime = time(NULL);
 	statbuf->st_mtime = time(NULL);
 	
-	if (strcmp(path, "/") == 0) {
+	if ((path[strlen(path) - 1]) == '/') {
 		statbuf->st_mode = S_IFDIR | 0755;
 		statbuf->st_nlink = 2;
 	}

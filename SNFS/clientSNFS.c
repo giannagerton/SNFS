@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <fcntl.h>
+#include <errno.h>
 #include "clientSNFS.h"
 #include "fileops.h"
 
@@ -26,6 +27,7 @@ static int client_read(const char* path, char* buf, size_t size, off_t offset, s
 static int client_flush(const char* path, struct fuse_file_info* info);
 static int client_truncate(const char* path, off_t offset);
 static int client_write(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* file);
+static int client_mkdir(const char* path, mode_t mode);
 
 static struct fuse_operations operations = {
 	.getattr = client_getattr,
@@ -36,6 +38,7 @@ static struct fuse_operations operations = {
 	.flush = client_flush,
 	.truncate = client_truncate,
 	.write = client_write,
+	.mkdir = client_mkdir,
 };
 
 static int get_host_ip(char* host_ip) {
@@ -117,6 +120,7 @@ int recv_message(int sockfd, char* buffer) {
 }
 
 static int client_create(const char* path, mode_t mode, struct fuse_file_info* info) {
+	printf("in client_create\n");
 	int sockfd, count, received;
 	sockfd = create_connection();
 	
@@ -138,7 +142,27 @@ static int client_create(const char* path, mode_t mode, struct fuse_file_info* i
 
 }
 
+static int client_mkdir(const char* path, mode_t mode){
+	printf("in mkdir\n");
+	int sockfd, count, received;
+	sockfd = create_connection();
+	char buffer[BUFFER_SIZE];
+	buffer[0] = MKDIR;
+	count = 1;
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path)+1, count);
+	count = add_param_to_buffer(buffer, (char*)&mode, sizeof(mode), count);
+	count = send_message(sockfd, buffer, count);
+	while(1){
+		if(recv_message(sockfd, buffer) > 0){
+			break;
+		}
+	}
+	close(sockfd);
+	return 0;
+}
+
 static int client_open(const char* path, struct fuse_file_info* info) {
+	printf("in client_open\n");
 	int sockfd, count, received;
 	sockfd = create_connection();
 	
@@ -160,13 +184,16 @@ static int client_open(const char* path, struct fuse_file_info* info) {
 	return 0;
 }
 
+
 static int client_getattr(const char* path, struct stat* st) {
+	printf("in client_getattr\n");
 	int sockfd, count, received;
 	uid_t uid = getuid();
 	gid_t gid = getgid();
 	sockfd = create_connection();
 	
 	char buffer[BUFFER_SIZE];
+	//char* buffer = "this is stupid";
 	buffer[0] = GETATTR;
 	buffer[1] = SEPARATOR;
 	count = 2;
@@ -180,15 +207,21 @@ static int client_getattr(const char* path, struct stat* st) {
 		if (recv_message(sockfd, buffer) > 0) {
 			break;
 		}
-	}	
-	get_attr(st, (char*)path, uid, gid);
+	}
+	//get_attr(st, (char*)path, uid, gid);
 	memcpy(&received, buffer, sizeof(int));
 	close(sockfd);
 	printf("received = %d\n", received);
+	if (received == 1) {
+		received = 0;
+		strcat((char*)path, "/");
+	}
+	get_attr(st, (char*)path, uid, gid);
 	return received;
 }
 
 static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi) {
+	printf("in client_readdir\n");
 	int sockfd, count, received;	
 	sockfd = create_connection();
 	char buff[BUFFER_SIZE];
@@ -211,7 +244,19 @@ static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler
 	return 0;
 }
 
+static int client_opendir(const char* path){
+	printf("in client_opendir\n");
+	int sockfd;
+	char buff[BUFFER_SIZE];
+	buff[0] = OPENDIR;
+	buff[1] = SEPARATOR;
+	printf("opendir\n");
+//	send_message(sockfd, buff);
+	return 0;
+}
+
 static int client_flush(const char* path, struct fuse_file_info* fi) {
+	printf("in client_flush\n");
 	int sockfd, count, received;
 	sockfd = create_connection();
 	char buffer[BUFFER_SIZE];
@@ -233,13 +278,13 @@ static int client_flush(const char* path, struct fuse_file_info* fi) {
 }
 
 static int client_truncate(const char* path, off_t size) {
+	printf("in client_truncate\n");
 	int sockfd, count, received;
 	sockfd = create_connection();
 	char buffer[BUFFER_SIZE];
 	buffer[0] = TRUNCATE;
 	buffer[1] = SEPARATOR;
 	count = 2;
-	printf("truncate\n");
 	printf("trunc path = %s\n", path);
 
 	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count);
@@ -259,6 +304,7 @@ static int client_truncate(const char* path, off_t size) {
 }
 
 static int client_read(const char* path, char* buf, size_t size, off_t offset, struct fuse_file_info* info) {
+	printf("client_read\n");
 	int sockfd, count, received;
 	sockfd = create_connection();
 	char buffer[BUFFER_SIZE];
@@ -322,6 +368,7 @@ static int client_write(const char* path, const char* buf, size_t size, off_t of
 }
 
 int main(int argc, char *argv[]) {
+	printf("in main\n");
 	struct fuse_args args = FUSE_ARGS_INIT(0, NULL);
 	if (argc < 7) {
 		printf("not enough args\n");
@@ -345,6 +392,6 @@ int main(int argc, char *argv[]) {
 	fuse_opt_add_arg(&args, argv[0]);
 	fuse_opt_add_arg(&args, "-f");
 	fuse_opt_add_arg(&args, argv[6]);
-
+	printf("end of main\n");
 	return fuse_main(args.argc, args.argv, &operations, NULL);
 }

@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include "clientSNFS.h"
 #include "fileops.h"
+#include <errno.h>
 #include <dirent.h>
 
 #define MAX_CLIENTS 10
@@ -44,6 +45,7 @@ int server_getattr(char* buffer) {
 	char pathname[BUFFER_SIZE];
 	char final_path[BUFFER_SIZE];
 	struct stat* statbuf;
+	DIR* dir;
 	int return_value;
 	printf("getattr\n");
 	strcpy(final_path, mount_path);
@@ -64,10 +66,22 @@ int server_getattr(char* buffer) {
 	//add_param_to_buffer(buffer, (char*)statbuf, sizeof(struct stat), 0);
 	if (access(final_path, F_OK) != -1) {
 		return_value = 0;
+		dir = opendir(final_path);
+		if (dir) {
+			closedir(dir);
+			return_value = 1;
+		}
 	}
 	else {
-		return_value = -ENOENT;	
+		return_value = -ENOENT;
+		//dir = opendir(final_path);
+		//if (dir) {
+		//	closedir(dir);
+		//	printf("opened directory\n");
+		//	return_value = 0;
+		//}
 	}
+	printf("return value for getattr = %d\n", return_value);
 	memcpy(buffer, &return_value, sizeof(return_value));
 	return 0;
 }
@@ -91,6 +105,12 @@ int server_readdir(char* buffer) {
 	return 0;
 }
 
+int server_opendir(char* buffer){
+	printf("opening directory\n");
+	bzero(buffer, BUFFER_SIZE);
+	return 0;
+}
+
 int server_create(char* buffer) {
 	char file_name[BUFFER_SIZE];
 	char final_path[BUFFER_SIZE];
@@ -109,6 +129,26 @@ int server_create(char* buffer) {
 		return -1;
 	}
 	close(fd);
+	return 0;
+}
+
+int server_mkdir(char* buffer){
+	char dir_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	
+	strcpy(final_path, mount_path);
+
+	mode_t mode;
+	int count;
+	count = get_string_parameter(buffer,1, dir_name);
+	count = get_struct_parameter(buffer, count, sizeof(mode_t), &mode);
+	printf("in mkdir\n");	
+	printf("%s\n", dir_name);
+	strcat(final_path, dir_name);
+	if(mkdir(final_path, mode) < 0){
+		perror("could not create directory");
+		return -1;
+	}
 	return 0;
 }
 
@@ -259,6 +299,8 @@ void* thread_runner(void* args) {
 			break;
 		case WRITE:
 			server_write(buffer);
+		case MKDIR:
+			server_mkdir(buffer);
 			break;
 		default:
 			printf("default\n");
@@ -333,7 +375,8 @@ int main(int argc, char *argv[]) {
 		pthread_t thread;
 		client_args args;
 		args.sockfd = client_fd;
-		pthread_create(&thread, NULL, &thread_runner, &args);
+		printf("here in server\n");
+		pthread_create(&thread, NULL, &thread_runner, &client_fd);
 		// create thread
 	}
 	close(serverfd);
