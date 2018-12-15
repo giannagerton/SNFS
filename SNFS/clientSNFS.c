@@ -28,6 +28,8 @@ static int client_flush(const char* path, struct fuse_file_info* info);
 static int client_truncate(const char* path, off_t offset);
 static int client_write(const char* path, const char* buf, size_t size, off_t offset, struct fuse_file_info* file);
 static int client_mkdir(const char* path, mode_t mode);
+static int client_release(const char* path, struct fuse_file_info* file);
+static int client_releasedir(const char* path, struct fuse_file_info* file);
 
 static struct fuse_operations operations = {
 	.getattr = client_getattr,
@@ -39,6 +41,8 @@ static struct fuse_operations operations = {
 	.truncate = client_truncate,
 	.write = client_write,
 	.mkdir = client_mkdir,
+	.release = client_release,
+	.releasedir = client_releasedir,
 };
 
 static int get_host_ip(char* host_ip) {
@@ -365,6 +369,14 @@ static int client_write(const char* path, const char* buf, size_t size, off_t of
 	}
 	close(sockfd);
 	return received;
+}
+
+static int client_release(const char* path, struct fuse_file_info* fi) {
+	return 0;
+}
+
+static int client_releasedir(const char* path, struct fuse_file_info* fi) {
+	return 0;
 }
 
 int main(int argc, char *argv[]) {
