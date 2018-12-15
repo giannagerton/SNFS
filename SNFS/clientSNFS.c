@@ -27,6 +27,7 @@ static int client_read(const char* path, char* buf, size_t size, off_t offset, s
 static int client_flush(const char* path, struct fuse_file_info* info);
 static int client_truncate(const char* path, off_t offset);
 static int client_mkdir(const char* path, mode_t mode);
+static int client_opendir(const char* path);
 
 static struct fuse_operations operations = {
 	.getattr = client_getattr,
@@ -37,6 +38,7 @@ static struct fuse_operations operations = {
 	.flush = client_flush,
 	.truncate = client_truncate,
 	.mkdir = client_mkdir,
+	.opendir = client_opendir,
 };
 
 static int get_host_ip(char* host_ip) {
@@ -179,6 +181,25 @@ static int client_open(const char* path, struct fuse_file_info* info) {
 
 	close(sockfd);
 	count = *(int*)buffer;
+	return 0;
+}
+
+static int client_opendir(const char* path){
+	printf("in opendir\n");
+	int sockfd, count, receivved;
+	sockfd = create_connection();
+	
+	char buffer[BUFFER_SIZE];
+	buffer[0] = OPENDIR;
+	count = 1;
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count);
+	send_message(sockfd, buffer, count);
+	while(1){
+		if(recv_message(sockfd, buffer) > 0){
+			break;
+		}
+	}
+	close(sockfd);
 	return 0;
 }
 

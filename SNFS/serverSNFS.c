@@ -90,8 +90,18 @@ int server_readdir(char* buffer) {
 }
 
 int server_opendir(char* buffer){
+	char dir_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	strcpy(final_path, mount_path);
+	int count, fd;
+	count = get_string_parameter(buffer, 1, dir_name);
+	strcat(final_path, dir_name);
 	printf("opening directory\n");
-	bzero(buffer, BUFFER_SIZE);
+	if ((fd = opendir(final_path)) < 0){
+		perror("could not open\n");
+		return -1;
+	}
+	memcpy(buffer, &fd, sizeof(int));
 	return 0;
 }
 
@@ -246,6 +256,9 @@ void* thread_runner(void* args) {
 			break;
 		case MKDIR:
 			server_mkdir(buffer);
+			break;
+		case OPENDIR:
+			server_opendir(buffer);
 			break;
 		default:
 			printf("default\n");
