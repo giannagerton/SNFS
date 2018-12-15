@@ -30,6 +30,7 @@ static int client_write(const char* path, const char* buf, size_t size, off_t of
 static int client_mkdir(const char* path, mode_t mode);
 static int client_release(const char* path, struct fuse_file_info* file);
 static int client_releasedir(const char* path, struct fuse_file_info* file);
+static int client_opendir(const char* path, struct fuse_file_info* fi);
 
 static struct fuse_operations operations = {
 	.getattr = client_getattr,
@@ -43,6 +44,7 @@ static struct fuse_operations operations = {
 	.mkdir = client_mkdir,
 	.release = client_release,
 	.releasedir = client_releasedir,
+	.opendir = client_opendir,
 };
 
 static int get_host_ip(char* host_ip) {
@@ -188,6 +190,25 @@ static int client_open(const char* path, struct fuse_file_info* info) {
 	return 0;
 }
 
+static int client_opendir(const char* path, struct fuse_file_info* fi){
+	printf("in opendir\n");
+	int sockfd, count, receivved;
+	sockfd = create_connection();
+	
+	char buffer[BUFFER_SIZE];
+	buffer[0] = OPENDIR;
+	count = 1;
+	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count);
+	send_message(sockfd, buffer, count);
+	while(1){
+		if(recv_message(sockfd, buffer) > 0){
+			break;
+		}
+	}
+	close(sockfd);
+	return 0;
+}
+
 
 static int client_getattr(const char* path, struct stat* st) {
 	printf("in client_getattr\n");
@@ -232,7 +253,9 @@ static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler
 	buff[0] = READDIR;
 	buff[1] = SEPARATOR;
 	count = 2;
+	count = add_param_to_buffer(buff, (char*)path, strlen(path) + 1, count);
 	printf("readdir\n");
+	printf("%s\n", path);
 	count = send_message(sockfd, buff, count);
 	while (1) {
 		if (recv_message(sockfd, buff) > 0) {
@@ -245,17 +268,6 @@ static int client_readdir(const char* path, void* buffer, fuse_fill_dir_t filler
 		filler(buffer, file, NULL, 0);
 	}
 	close(sockfd);
-	return 0;
-}
-
-static int client_opendir(const char* path){
-	printf("in client_opendir\n");
-	int sockfd;
-	char buff[BUFFER_SIZE];
-	buff[0] = OPENDIR;
-	buff[1] = SEPARATOR;
-	printf("opendir\n");
-//	send_message(sockfd, buff);
 	return 0;
 }
 
@@ -350,7 +362,9 @@ static int client_write(const char* path, const char* buf, size_t size, off_t of
 	buffer[1] = SEPARATOR;
 	count = 2;
 	printf("write\n");
-	
+	printf("%d\n", size);
+	printf("%d\n", offset);
+	printf("end write\n");
 	count = add_param_to_buffer(buffer, (char*)path, strlen(path) + 1, count);
 	count = add_param_to_buffer(buffer, (char*)&size, sizeof(size_t), count);
 	count = add_param_to_buffer(buffer, (char*)&offset, sizeof(off_t), count);

@@ -95,6 +95,7 @@ int server_readdir(char* buffer) {
 	count = get_string_parameter(buffer, count, directory);
 	strcat(final_path, directory);
 	bzero(buffer, BUFFER_SIZE);
+	printf("directory is %s\n", directory);
 	DIR* open_dir = opendir(final_path);
 	struct dirent* read_dir;
 	count = 0;
@@ -106,8 +107,20 @@ int server_readdir(char* buffer) {
 }
 
 int server_opendir(char* buffer){
+	char dir_name[BUFFER_SIZE];
+	char final_path[BUFFER_SIZE];
+	strcpy(final_path, mount_path);
+	int count;
+	DIR* fd;
+	count = get_string_parameter(buffer, 1, dir_name);
+	strcat(final_path, dir_name);
 	printf("opening directory\n");
-	bzero(buffer, BUFFER_SIZE);
+	if ((fd = opendir(final_path)) < 0){
+		perror("could not open\n");
+		return -1;
+	}
+	closedir(fd);
+	memcpy(buffer, &fd, sizeof(int));
 	return 0;
 }
 
@@ -217,7 +230,11 @@ int server_read(char* buffer) {
 	strcat(final_path, file_name);
 	bzero(buffer, BUFFER_SIZE);
 	fd = open(final_path, 0);
-	read = pread(fd, buffer + sizeof(int), size, offset);
+	read = (BUFFER_SIZE - sizeof(int));
+	if (size < read) {
+		read = size;
+	}
+	read = pread(fd, buffer + sizeof(int),read , offset);
 	close(fd);
 	add_param_to_buffer(buffer, (char*)&read, sizeof(int), 0);
 	printf("%s\n", buffer + sizeof(int));
@@ -230,13 +247,13 @@ int server_write(char* buffer) {
 	char write_buf[BUFFER_SIZE];
 	strcpy(write_file_path, mount_path);
 	
-	int count, readfd, writefd, written;
+	int count, buf_start, writefd, written;
 	size_t size;
 	off_t offset;
 	count = get_string_parameter(buffer, 2, write_file);
 	count = get_struct_parameter(buffer, count, sizeof(size_t), &size);
-	count = get_struct_parameter(buffer, count, sizeof(off_t), &offset);
-	count = get_string_parameter(buffer, count, write_buf);
+	buf_start = get_struct_parameter(buffer, count, sizeof(off_t), &offset);
+	count = get_string_parameter(buffer, buf_start, write_buf);
 	strcat(write_file_path, write_file);
 	bzero(buffer, BUFFER_SIZE);
 	printf("write file = %s\n", write_file_path);
@@ -248,7 +265,11 @@ int server_write(char* buffer) {
 	printf("fd = %d\n", writefd);
 	printf("size = %d\n", size);
 	printf("offset = %d\n", offset);
-	written = pwrite(writefd, write_buf, size, offset);
+	written = BUFFER_SIZE - buf_start;
+	if (written > size) {
+		written = size;
+	}
+	written = pwrite(writefd, write_buf, written, offset);
 	
 	printf("written = %d\n", written);
 	add_param_to_buffer(buffer, (char*)&written, sizeof(int), 0);
@@ -301,6 +322,9 @@ void* thread_runner(void* args) {
 			server_write(buffer);
 		case MKDIR:
 			server_mkdir(buffer);
+			break;
+		case OPENDIR:
+			server_opendir(buffer);
 			break;
 		default:
 			printf("default\n");
